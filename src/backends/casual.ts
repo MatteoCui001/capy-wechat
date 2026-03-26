@@ -23,6 +23,7 @@ import {
   log,
   logError,
 } from "../config.ts";
+import { loadHistory, saveHistory, clearHistory } from "../messaging/history-store.ts";
 
 // ── URL fetcher ─────────────────────────────────────────────────────────────
 
@@ -86,7 +87,11 @@ export class CasualBackend implements AIBackend {
   // ── History helpers ───────────────────────────────────────────────────────
 
   private getHistory(userId: string): ChatMessage[] {
-    if (!this.histories.has(userId)) this.histories.set(userId, []);
+    if (!this.histories.has(userId)) {
+      // Try loading from disk first (survives restarts)
+      const persisted = loadHistory(userId);
+      this.histories.set(userId, persisted);
+    }
     return this.histories.get(userId)!;
   }
 
@@ -96,12 +101,15 @@ export class CasualBackend implements AIBackend {
     if (h.length > MAX_HISTORY_PER_USER) {
       h.splice(0, h.length - MAX_HISTORY_PER_USER);
     }
+    // Persist to disk after every message
+    saveHistory(userId, h);
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
 
   reset(userId: string): void {
     this.histories.delete(userId);
+    clearHistory(userId);
   }
 
   async ask(userId: string, msg: InboundMsg): Promise<string> {
